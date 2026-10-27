@@ -1,8 +1,9 @@
 """Read BeagleY-AI GPIO sensors and log readings for the SecureBox demo.
 
-Runs with Linux Python 3. HC-SR04 and vibration inputs use libgpiod v1.
-The DHT sensor is read through the Linux IIO DHT11/DHT22 kernel driver, which
-handles the sensor's timing-sensitive signal outside Python userspace.
+Runs with Linux Python 3. HC-SR04 and vibration inputs use libgpiod. Both
+the Debian v1 and v2 Python APIs are supported. The DHT sensor is read
+through the Linux IIO DHT11/DHT22 kernel driver, which handles the sensor's
+timing-sensitive signal outside Python userspace.
 """
 
 import csv
@@ -68,68 +69,132 @@ class BeagleGpio:
                 "'python3-libgpiod' and use that system Python in Thonny."
             ) from error
 
-        if not hasattr(gpiod, "LINE_REQ_DIR_IN"):
-            raise RuntimeError(
-                "This starter uses the libgpiod v1 Python API. Install the "
-                "Debian python3-libgpiod package (v1), not the v2 pip API."
-            )
+        self._gpiod = gpiod
+        self._gpiod_v2 = not hasattr(gpiod, "LINE_REQ_DIR_IN")
 
         self._main0 = None
         self._main1 = None
         self._trigger = None
         self._echo = None
         self._vibration = None
+        self._trigger_request = None
+        self._echo_request = None
+        self._vibration_request = None
 
         try:
             self._main0 = gpiod.Chip(config.GPIO_CHIP_MAIN0)
             self._main1 = gpiod.Chip(config.GPIO_CHIP_MAIN1)
 
-            self._trigger = self._main1.get_line(config.ULTRASONIC_TRIGGER_OFFSET)
-            self._trigger.request(
-                consumer="securebox-ultrasonic-trigger",
-                type=gpiod.LINE_REQ_DIR_OUT,
-                default_val=0,
-            )
+            if self._gpiod_v2:
+                direction = gpiod.line.Direction
+                value = gpiod.line.Value
+                self._trigger_request = self._main1.request_lines(
+                    consumer="securebox-ultrasonic-trigger",
+                    config={
+                        config.ULTRASONIC_TRIGGER_OFFSET: gpiod.LineSettings(
+                            direction=direction.OUTPUT,
+                            output_value=value.INACTIVE,
+                        )
+                    },
+                )
+                self._echo_request = self._main0.request_lines(
+                    consumer="securebox-ultrasonic-echo",
+                    config={
+                        config.ULTRASONIC_ECHO_OFFSET: gpiod.LineSettings(
+                            direction=direction.INPUT,
+                        )
+                    },
+                )
+                self._vibration_request = self._main0.request_lines(
+                    consumer="securebox-vibration",
+                    config={
+                        config.VIBRATION_OFFSET: gpiod.LineSettings(
+                            direction=direction.INPUT,
+                        )
+                    },
+                )
+            else:
+                self._trigger = self._main1.get_line(config.ULTRASONIC_TRIGGER_OFFSET)
+                self._trigger.request(
+                    consumer="securebox-ultrasonic-trigger",
+                    type=gpiod.LINE_REQ_DIR_OUT,
+                    default_val=0,
+                )
 
-            self._echo = self._main0.get_line(config.ULTRASONIC_ECHO_OFFSET)
-            self._echo.request(
-                consumer="securebox-ultrasonic-echo",
-                type=gpiod.LINE_REQ_DIR_IN,
-            )
+                self._echo = self._main0.get_line(config.ULTRASONIC_ECHO_OFFSET)
+                self._echo.request(
+                    consumer="securebox-ultrasonic-echo",
+                    type=gpiod.LINE_REQ_DIR_IN,
+                )
 
-            self._vibration = self._main0.get_line(config.VIBRATION_OFFSET)
-            self._vibration.request(
-                consumer="securebox-vibration",
-                type=gpiod.LINE_REQ_DIR_IN,
-            )
+                self._vibration = self._main0.get_line(config.VIBRATION_OFFSET)
+                self._vibration.request(
+                    consumer="securebox-vibration",
+                    type=gpiod.LINE_REQ_DIR_IN,
+                )
         except Exception:
             self.close()
             raise
 
     def read_vibration(self):
+        if self._gpiod_v2:
+            return (
+                self._vibration_request.get_value(config.VIBRATION_OFFSET)
+                == (
+                    self._gpiod.line.Value.ACTIVE
+                    if config.VIBRATION_ACTIVE_LEVEL
+                    else self._gpiod.line.Value.INACTIVE
+                )
+            )
         return self._vibration.get_value() == config.VIBRATION_ACTIVE_LEVEL
 
     def read_distance_cm(self):
-        self._trigger.set_value(0)
+        if self._gpiod_v2:
+            inactive = self._gpiod.line.Value.INACTIVE
+            active = self._gpiod.line.Value.ACTIVE
+            set_trigger = lambda value: self._trigger_request.set_value(
+                config.ULTRASONIC_TRIGGER_OFFSET, value
+            )
+            read_echo = lambda: (
+                self._echo_request.get_value(config.ULTRASONIC_ECHO_OFFSET)
+                == active
+            )
+        else:
+            inactive = 0
+            active = 1
+            set_trigger = self._trigger.set_value
+            read_echo = lambda: self._echo.get_value() == 1
+
+        set_trigger(inactive)
         time.sleep(0.000002)
-        self._trigger.set_value(1)
+        set_trigger(active)
         time.sleep(0.000010)
-        self._trigger.set_value(0)
+        set_trigger(inactive)
 
         timeout_ns = int(config.ECHO_TIMEOUT_SECONDS * 1_000_000_000)
         wait_started = time.monotonic_ns()
-        while self._echo.get_value() == 0:
+        while not read_echo():
             if time.monotonic_ns() - wait_started >= timeout_ns:
                 return None
 
         pulse_started = time.monotonic_ns()
-        while self._echo.get_value() == 1:
+        while read_echo():
             if time.monotonic_ns() - pulse_started >= timeout_ns:
                 return None
         pulse_seconds = (time.monotonic_ns() - pulse_started) / 1_000_000_000
         return pulse_seconds * 34300.0 / 2.0
 
     def close(self):
+        for request in (
+            self._vibration_request,
+            self._echo_request,
+            self._trigger_request,
+        ):
+            if request is not None:
+                try:
+                    request.release()
+                except OSError:
+                    pass
         for line in (self._vibration, self._echo, self._trigger):
             if line is not None:
                 try:

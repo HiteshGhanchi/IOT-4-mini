@@ -6,8 +6,10 @@ physical header pins; they are not Raspberry Pi GPIO numbers.
 """
 
 # gpiodetect identifies which /dev/gpiochipN belongs to each controller.
-GPIO_CHIP_MAIN0 = "/dev/gpiochip0"
-GPIO_CHIP_MAIN1 = "/dev/gpiochip1"
+# On the current BeagleBoard.org Debian image these are gpiochip2 and
+# gpiochip3; chip numbering can vary by image.
+GPIO_CHIP_MAIN0 = "/dev/gpiochip2"
+GPIO_CHIP_MAIN1 = "/dev/gpiochip3"
 
 # BeagleY-AI header assignments:
 # DHT DATA: P7  -> GPIO0_38 (handled by the Linux DHT IIO driver)

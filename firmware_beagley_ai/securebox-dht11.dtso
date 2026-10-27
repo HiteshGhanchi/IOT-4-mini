@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: GPL-2.0-only OR MIT
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include "ti/k3-pinctrl.h"
+
+&{/chosen} {
+	overlays {
+		securebox_dht11.kernel = __TIMESTAMP__;
+	};
+};
+
+&{/} {
+	securebox_dht11: securebox-dht11 {
+		compatible = "dht11";
+		pinctrl-names = "default";
+		pinctrl-0 = <&hat_07_gpio_pu>;
+		gpios = <&main_gpio0 38 GPIO_ACTIVE_HIGH>;
+	};
+};
