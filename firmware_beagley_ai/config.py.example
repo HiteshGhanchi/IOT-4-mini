@@ -1,0 +1,33 @@
+"""BeagleY-AI SecureBox settings.
+
+Copy this file to config.py and verify GPIO_CHIP_MAIN0/1 with gpiodetect.
+The line offsets below are the BeagleY-AI SoC GPIO offsets for the selected
+physical header pins; they are not Raspberry Pi GPIO numbers.
+"""
+
+# gpiodetect identifies which /dev/gpiochipN belongs to each controller.
+GPIO_CHIP_MAIN0 = "/dev/gpiochip0"
+GPIO_CHIP_MAIN1 = "/dev/gpiochip1"
+
+# BeagleY-AI header assignments:
+# DHT DATA: P7  -> GPIO0_38 (handled by the Linux DHT IIO driver)
+# HC-SR04 TRIG: P11 -> GPIO1_8
+# HC-SR04 ECHO: P13 -> GPIO0_33 (through a 5 V-to-3.3 V divider)
+# Vibration DO: P15 -> GPIO0_41
+ULTRASONIC_TRIGGER_OFFSET = 8
+ULTRASONIC_ECHO_OFFSET = 33
+VIBRATION_OFFSET = 41
+
+# Leave empty to discover a bound DHT IIO device automatically.
+# Example: "/sys/bus/iio/devices/iio:device0"
+DHT_IIO_DEVICE = ""
+
+VIBRATION_ACTIVE_LEVEL = 1
+DISTANCE_ALERT_CM = 50.0
+TEMPERATURE_MIN_C = 5.0
+TEMPERATURE_MAX_C = 35.0
+HUMIDITY_MAX_PERCENT = 85.0
+
+SAMPLE_INTERVAL_SECONDS = 5
+ECHO_TIMEOUT_SECONDS = 0.03
+CSV_FILE = "readings.csv"
