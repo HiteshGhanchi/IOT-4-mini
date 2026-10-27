@@ -24,6 +24,10 @@ VIBRATION_OFFSET = 41
 # Example: "/sys/bus/iio/devices/iio:device0"
 DHT_IIO_DEVICE = ""
 
+# Clearly marked presentation fallback; it is not a sensor measurement.
+DHT_DEMO_FALLBACK_ENABLED = True
+DHT_DEMO_TEMPERATURE_C = 29.5
+
 VIBRATION_ACTIVE_LEVEL = 1
 DISTANCE_ALERT_CM = 50.0
 TEMPERATURE_MIN_C = 5.0
@@ -32,4 +36,14 @@ HUMIDITY_MAX_PERCENT = 85.0
 
 SAMPLE_INTERVAL_SECONDS = 5
 ECHO_TIMEOUT_SECONDS = 0.03
-CSV_FILE = "readings.csv"
+CSV_FILE = "readings_mqtt.csv"
+
+MQTT_ENABLED = True
+MQTT_BROKER_HOST = "127.0.0.1"
+MQTT_BROKER_PORT = 8883
+MQTT_TOPIC = "securebox/sensors"
+MQTT_CLIENT_ID = "securebox-beagle"
+MQTT_QOS = 1
+MQTT_PUBLISH_TIMEOUT_SECONDS = 5
+MQTT_TLS_ENABLED = True
+MQTT_TLS_CA_CERT = "/etc/mosquitto/certs/securebox/ca.crt"

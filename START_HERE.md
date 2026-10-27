@@ -8,14 +8,13 @@ directly to the BeagleY-AI GPIO header; there is no ESP32.
 ```text
 DHT11/DHT22 -- Linux IIO sensor driver --+
 HC-SR04 ----------------------------------+--> BeagleY-AI (Debian + Python)
-Digital vibration sensor ----------------+        |-- Thonny Shell
-                                                   +-- readings.csv
+Digital vibration sensor ----------------+        |-- Console + CSV
+                                                   +-- MQTT over TLS --> Mosquitto
 ```
 
-The first stage is intentionally local: read the sensors, show threshold
-alerts in Thonny, and save data to CSV. MQTT/backend/dashboard integration is
-not part of this starter because those service programs are not in this
-workspace.
+For complete first-time setup, MQTT/TLS instructions, and the two-terminal
+demo, start with the root [README.md](./README.md). The longer hardware and
+Thonny guide is [firmware_beagley_ai/README_THONNY.md](./firmware_beagley_ai/README_THONNY.md).
 
 ## Wiring
 
@@ -48,7 +47,10 @@ On the BeagleY-AI Debian system:
 
 ```bash
 sudo apt update
-sudo apt install python3-thonny python3-libgpiod gpiod
+sudo apt install python3-thonny python3-libgpiod gpiod mosquitto mosquitto-clients python3-paho-mqtt openssl
+sudo systemctl enable --now mosquitto
+cd ~/Documents/SecureBox
+sudo sh setup_mqtt_tls.sh
 ```
 
 1. Copy `firmware_beagley_ai/config.py.example` to

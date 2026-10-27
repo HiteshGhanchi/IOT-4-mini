@@ -8,7 +8,9 @@ timing-sensitive signal outside Python userspace.
 
 import csv
 import glob
+import json
 import os
+import ssl
 import sys
 import time
 from datetime import datetime
@@ -19,6 +21,10 @@ import config
 IIO_ROOT = "/sys/bus/iio/devices"
 IIO_TEMPERATURE_FILE = "in_temp_input"
 IIO_HUMIDITY_FILE = "in_humidityrelative_input"
+CSV_HEADER = [
+    "timestamp", "temperature_c", "humidity_percent", "dht_source",
+    "dht_error", "distance_cm", "vibration", "alerts",
+]
 
 
 def _find_dht_device():
@@ -57,6 +63,139 @@ def _read_dht(device):
     temperature = _read_iio_value(device, IIO_TEMPERATURE_FILE)
     humidity = _read_iio_value(device, IIO_HUMIDITY_FILE)
     return temperature, humidity
+
+
+def _apply_dht_fallback(temperature, humidity, error=None):
+    if temperature is not None:
+        return temperature, humidity, "sensor", error
+    if config.DHT_DEMO_FALLBACK_ENABLED:
+        return config.DHT_DEMO_TEMPERATURE_C, None, "simulated", error
+    return None, None, "unavailable", error
+
+
+def _mqtt_payload(timestamp, temperature, humidity, dht_source, dht_error,
+                  distance_cm, vibration, alerts):
+    return json.dumps(
+        {
+            "timestamp": timestamp,
+            "temperature_c": temperature,
+            "humidity_percent": humidity,
+            "dht_source": dht_source,
+            "dht_error": dht_error,
+            "distance_cm": distance_cm,
+            "vibration": vibration,
+            "alerts": alerts,
+        },
+        separators=(",", ":"),
+    )
+
+
+class MqttPublisher:
+    def __init__(self):
+        try:
+            import paho.mqtt.client as mqtt
+        except ImportError as error:
+            raise RuntimeError(
+                "Python MQTT client is missing. Install the OS package "
+                "'python3-paho-mqtt'."
+            ) from error
+
+        self._mqtt = mqtt
+        if hasattr(mqtt, "CallbackAPIVersion"):
+            self._client = mqtt.Client(
+                callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+                client_id=config.MQTT_CLIENT_ID,
+            )
+        else:
+            self._client = mqtt.Client(client_id=config.MQTT_CLIENT_ID)
+        if config.MQTT_TLS_ENABLED:
+            self._client.tls_set(
+                ca_certs=config.MQTT_TLS_CA_CERT,
+                cert_reqs=ssl.CERT_REQUIRED,
+            )
+            print(
+                "[TLS] enabled; verifying broker certificate with %s"
+                % config.MQTT_TLS_CA_CERT
+            )
+        else:
+            print("[TLS] DISABLED")
+        self._tls_verified = not config.MQTT_TLS_ENABLED
+        self._reported_tls_unverified = False
+        self._client.on_connect = self._on_connect
+        self._client.reconnect_delay_set(min_delay=1, max_delay=30)
+        self._reported_disconnected = False
+        print(
+            "[MQTT] connecting to %s:%s, topic=%s"
+            % (config.MQTT_BROKER_HOST, config.MQTT_BROKER_PORT,
+               config.MQTT_TOPIC)
+        )
+        self._client.connect_async(
+            config.MQTT_BROKER_HOST,
+            config.MQTT_BROKER_PORT,
+            keepalive=60,
+        )
+        self._client.loop_start()
+
+    def _on_connect(self, client, userdata, flags, reason_code, properties=None):
+        if getattr(reason_code, "is_failure", reason_code != 0):
+            self._tls_verified = False
+            print("[MQTT] connection failed: %s" % reason_code)
+            return
+
+        print("[MQTT] connected")
+        if config.MQTT_TLS_ENABLED:
+            connection = client.socket()
+            if connection is None or not connection.getpeercert():
+                self._tls_verified = False
+                print("[TLS] ERROR: broker certificate was not verified")
+                return
+            cipher = connection.cipher()
+            self._tls_verified = True
+            self._reported_tls_unverified = False
+            print(
+                "[TLS] VERIFIED | protocol=%s | cipher=%s"
+                % (
+                    connection.version(),
+                    cipher[0] if cipher else "unknown",
+                )
+            )
+
+    def publish(self, payload):
+        if config.MQTT_TLS_ENABLED and not self._tls_verified:
+            if not self._reported_tls_unverified:
+                print("[MQTT] TLS peer not verified; sample not sent")
+                self._reported_tls_unverified = True
+            return
+
+        if not self._client.is_connected():
+            if not self._reported_disconnected:
+                print("[MQTT] broker unavailable; reconnecting, sample not sent")
+                self._reported_disconnected = True
+            return
+
+        self._reported_disconnected = False
+        info = self._client.publish(
+            config.MQTT_TOPIC,
+            payload,
+            qos=config.MQTT_QOS,
+        )
+        if info.rc != self._mqtt.MQTT_ERR_SUCCESS:
+            print("[MQTT] publish rejected (error code %s)" % info.rc)
+            return
+
+        try:
+            info.wait_for_publish(timeout=config.MQTT_PUBLISH_TIMEOUT_SECONDS)
+        except RuntimeError as error:
+            print("[MQTT] publish failed: %s" % error)
+            return
+        if not info.is_published():
+            print("[MQTT] publish timed out; delivery not confirmed")
+            return
+        print("[MQTT] published to %s" % config.MQTT_TOPIC)
+
+    def close(self):
+        self._client.disconnect()
+        self._client.loop_stop()
 
 
 class BeagleGpio:
@@ -227,13 +366,19 @@ def _alerts(temperature, humidity, distance_cm, vibration):
 
 def _append_csv(path, row):
     needs_header = not os.path.exists(path) or os.path.getsize(path) == 0
+    if not needs_header:
+        with open(path, "r", newline="", encoding="utf-8") as source:
+            existing_header = next(csv.reader(source), [])
+        if existing_header != CSV_HEADER:
+            raise RuntimeError(
+                "CSV header in %s is from an older format. Preserve the old "
+                "file and set CSV_FILE in config.py to a new filename."
+                % path
+            )
     with open(path, "a", newline="", encoding="utf-8") as output:
         writer = csv.writer(output)
         if needs_header:
-            writer.writerow(
-                ["timestamp", "temperature_c", "humidity_percent",
-                 "distance_cm", "vibration", "alerts"]
-            )
+            writer.writerow(CSV_HEADER)
         writer.writerow(row)
 
 
@@ -241,26 +386,49 @@ def main():
     dht_device = _find_dht_device()
     if dht_device is None:
         print(
-            "[DHT] No DHT IIO device found. Temperature/humidity will be "
-            "blank until the Linux DHT11/DHT22 kernel driver is enabled and "
-            "bound to the data GPIO."
+            "[DHT] No DHT IIO device found; checking the configured demo "
+            "fallback."
         )
     else:
         print("[DHT] IIO device: %s" % dht_device)
 
     gpio = BeagleGpio()
-    csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), config.CSV_FILE)
-    print("[GPIO] ready; writing readings to %s" % csv_path)
-    print("Press Ctrl+C in Thonny to stop.")
-
+    mqtt_publisher = None
     try:
+        if config.MQTT_ENABLED:
+            mqtt_publisher = MqttPublisher()
+        csv_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), config.CSV_FILE
+        )
+        print("[GPIO] ready; writing readings to %s" % csv_path)
+        print("Press Ctrl+C in Thonny to stop.")
+
         while True:
             timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+            dht_error = None
             try:
                 temperature, humidity = _read_dht(dht_device)
             except (OSError, ValueError) as error:
                 temperature, humidity = None, None
-                print("[DHT] read failed: %s" % error)
+                dht_error = "%s: %s" % (type(error).__name__, error)
+
+            temperature, humidity, dht_source, dht_error = _apply_dht_fallback(
+                temperature, humidity, dht_error
+            )
+            if dht_source == "simulated":
+                print(
+                    "[DHT] SENSOR VALUE UNAVAILABLE; using SIMULATED fallback "
+                    "%.1f C (not a sensor measurement)%s"
+                    % (
+                        temperature,
+                        ": " + dht_error if dht_error else "",
+                    )
+                )
+            elif dht_source == "unavailable":
+                print(
+                    "[DHT] reading unavailable%s"
+                    % (": " + dht_error if dht_error else "")
+                )
 
             distance_cm = gpio.read_distance_cm()
             if distance_cm is None:
@@ -272,11 +440,14 @@ def main():
             temp_text = "--" if temperature is None else "%.1f C" % temperature
             humidity_text = "--" if humidity is None else "%.1f%%" % humidity
             alert_text = ", ".join(alerts) if alerts else "none"
+            if dht_source == "simulated":
+                temp_text += " (SIMULATED)"
 
             print(
-                "%s | temp=%s hum=%s distance=%s vibration=%s | alerts=%s"
-                % (timestamp, temp_text, humidity_text, distance_text,
-                   "YES" if vibration else "no", alert_text)
+                "%s | temp=%s hum=%s dht_source=%s distance=%s "
+                "vibration=%s | alerts=%s"
+                % (timestamp, temp_text, humidity_text, dht_source,
+                   distance_text, "YES" if vibration else "no", alert_text)
             )
             _append_csv(
                 csv_path,
@@ -284,16 +455,33 @@ def main():
                     timestamp,
                     "" if temperature is None else "%.2f" % temperature,
                     "" if humidity is None else "%.2f" % humidity,
+                    dht_source,
+                    dht_error or "",
                     "" if distance_cm is None else "%.2f" % distance_cm,
                     int(vibration),
                     "; ".join(alerts),
                 ],
             )
+            if mqtt_publisher is not None:
+                mqtt_publisher.publish(
+                    _mqtt_payload(
+                        timestamp,
+                        temperature,
+                        humidity,
+                        dht_source,
+                        dht_error,
+                        distance_cm,
+                        vibration,
+                        alerts,
+                    )
+                )
             time.sleep(config.SAMPLE_INTERVAL_SECONDS)
     except KeyboardInterrupt:
         print("\nStopping SecureBox reader.")
     finally:
         gpio.close()
+        if mqtt_publisher is not None:
+            mqtt_publisher.close()
 
 
 if __name__ == "__main__":

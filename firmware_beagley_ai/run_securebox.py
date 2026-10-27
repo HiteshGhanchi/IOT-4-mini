@@ -20,10 +20,12 @@ def main():
     if not MAIN.exists():
         raise SystemExit("Missing main.py in " + str(ROOT))
 
+    sys.path.insert(0, str(ROOT))
+    import config
+
     print("SecureBox sensor demo")
     print("Location: %s" % ROOT)
-    print("Press Ctrl+C to stop. CSV: %s" % (ROOT / "readings.csv"))
-    sys.path.insert(0, str(ROOT))
+    print("Press Ctrl+C to stop. CSV: %s" % (ROOT / config.CSV_FILE))
     runpy.run_path(str(MAIN), run_name="__main__")
 
 
