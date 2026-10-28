@@ -72,3 +72,33 @@ The exact DHT overlay depends on the installed Debian/kernel image.
 
 See [firmware_beagley_ai/README_THONNY.md](./firmware_beagley_ai/README_THONNY.md)
 for the full pin guide, setup checks, and troubleshooting.
+
+## Run the dashboard on the board
+
+With the Mosquitto broker and sensor program configured, open two terminals.
+
+Terminal 1:
+
+```bash
+cd ~/Documents/SecureBox/firmware_beagley_ai
+/usr/bin/python3 run_securebox.py
+```
+
+Terminal 2:
+
+```bash
+cd ~/Documents/SecureBox/dashboard
+python3 -m venv --system-site-packages .venv
+source .venv/bin/activate
+python3 -m pip install -r requirements.txt
+python3 app.py
+```
+
+Then open `http://127.0.0.1:5000` on the board. Sign in with `admin` /
+`securebox`, and replace those development credentials before deployment. To
+open it from another computer on the same network, run `hostname -I` on the
+board and visit `http://BOARD-IP:5000`.
+
+Dashboard messages are currently published to `securebox/commands`. The sensor
+program does not yet process that topic, so device actions require a command
+subscriber to be added before those controls can work.

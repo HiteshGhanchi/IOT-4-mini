@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SecureBox Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">SB</span><span>SecureBox</span></div>
+    <nav><a class="active" href="#overview">Overview</a><a href="#sensors">Sensors</a><a href="#messages">Messages</a></nav>
+    <form method="post" action="{{ url_for('logout') }}"><button class="logout" type="submit">Sign out</button></form>
+  </aside>
+
+  <main class="dashboard">
+    <header>
+      <div><p class="eyebrow">CONTROL CENTRE</p><h1>Good to see you, {{ username }}.</h1></div>
+      <div id="mqttBadge" class="status-pill"><span></span>Connecting</div>
+    </header>
+
+    <section id="overview" class="hero-card">
+      <div><p class="eyebrow">SECUREBOX STATUS</p><h2 id="boxStatus">Waiting for device</h2><p id="lastSeen" class="muted">No sensor data received yet</p></div>
+      <div class="alarm-ring"><span id="alarmIcon">✓</span></div>
+    </section>
+
+    <section id="sensors" class="metrics-grid">
+      <article class="metric-card"><div class="metric-label">Temperature</div><div class="metric-value"><span id="temperature">—</span><small>°C</small></div><p id="temperatureSource">Sensor unavailable</p></article>
+      <article class="metric-card"><div class="metric-label">Humidity</div><div class="metric-value"><span id="humidity">—</span><small>%</small></div><p>Relative humidity</p></article>
+      <article class="metric-card"><div class="metric-label">Distance</div><div class="metric-value"><span id="distance">—</span><small>cm</small></div><p>Ultrasonic proximity</p></article>
+      <article class="metric-card"><div class="metric-label">Vibration</div><div class="metric-value"><span id="vibration">—</span></div><p id="vibrationState">No data</p></article>
+    </section>
+
+    <section class="content-grid">
+      <article class="panel chart-panel">
+        <div class="panel-heading"><div><p class="eyebrow">LIVE READINGS</p><h3>Temperature history</h3></div></div>
+        <canvas id="temperatureChart" height="220" aria-label="Temperature history chart"></canvas>
+      </article>
+      <article class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">RECENT ALERTS</p><h3>Box activity</h3></div></div>
+        <div id="alertsList" class="alerts-list"><p class="empty-state">Waiting for activity.</p></div>
+      </article>
+    </section>
+
+    <section id="messages" class="panel message-panel">
+      <div class="panel-heading"><div><p class="eyebrow">DEVICE COMMANDS</p><h3>Send a message</h3></div></div>
+      <form id="messageForm">
+        <select id="action" aria-label="Message type"><option value="message">Message</option><option value="alarm_on">Turn alarm on</option><option value="alarm_off">Turn alarm off</option><option value="status">Request status</option></select>
+        <input id="messageText" maxlength="500" required placeholder="Type a message for the box...">
+        <button class="primary-button" type="submit">Send</button>
+      </form>
+      <p id="sendFeedback" class="send-feedback"></p>
+      <div id="messageList" class="message-list"></div>
+    </section>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

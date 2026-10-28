@@ -1,3 +1,4 @@
 firmware_beagley_ai/config.py
 firmware_beagley_ai/readings.csv
 __pycache__/
+dashboard/securebox.db

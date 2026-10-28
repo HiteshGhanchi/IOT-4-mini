@@ -118,3 +118,85 @@ disable that fallback.
 
 For wiring and the longer Thonny guide, see
 [firmware_beagley_ai/README_THONNY.md](./firmware_beagley_ai/README_THONNY.md).
+
+## Run the authenticated web dashboard on the BeagleY-AI
+
+The dashboard is in [dashboard/](./dashboard/). It shows live MQTT readings, alerts, recent history, and publishes messages or commands to `securebox/commands`.
+
+Complete the BeagleY-AI sensor and MQTT setup above, then use two terminals on the board. Leave both running while presenting the demo.
+
+### Terminal 1: sensor program and MQTT publisher
+
+```bash
+cd ~/Documents/SecureBox/firmware_beagley_ai
+/usr/bin/python3 run_securebox.py
+```
+
+### Terminal 2: dashboard
+
+```bash
+cd ~/Documents/SecureBox/dashboard
+python3 -m venv --system-site-packages .venv
+source .venv/bin/activate
+python3 -m pip install -r requirements.txt
+python3 app.py
+```
+
+Open Firefox or Chromium on the board at:
+
+```text
+http://127.0.0.1:5000
+```
+
+Development login:
+
+```text
+Username: admin
+Password: securebox
+```
+
+Set strong credentials and a Flask secret before a real deployment:
+
+```bash
+export SECUREBOX_USERNAME="your-username"
+export SECUREBOX_PASSWORD="a-long-random-password"
+export SECUREBOX_SECRET_KEY="a-long-random-secret"
+export MQTT_HOST="127.0.0.1"
+export MQTT_PORT="8883"
+export MQTT_TOPIC="securebox/sensors"
+export MQTT_COMMAND_TOPIC="securebox/commands"
+export MQTT_TLS="1"
+export MQTT_CA_CERT="/etc/mosquitto/certs/securebox/ca.crt"
+python3 app.py
+```
+
+### View the dashboard from another computer
+
+Find the BeagleY-AI IP address:
+
+```bash
+hostname -I
+```
+
+From another device on the same network, open:
+
+```text
+http://BEAGLE_IP_ADDRESS:5000
+```
+
+For example: `http://192.168.1.50:5000`. The dashboard binds to `0.0.0.0`, so it is reachable on the LAN. Do not expose port 5000 directly to the internet: this demo login is not suitable for internet-facing deployment without HTTPS, secure session cookies, rate limiting, and proper MQTT authentication.
+
+### Useful checks
+
+```bash
+curl http://127.0.0.1:5000/api/health
+ss -ltn | grep 5000
+ss -ltn | grep 8883
+sudo systemctl status mosquitto
+```
+
+Press `Ctrl+C` in either terminal to stop that process.
+
+### Current messaging limitation
+
+Dashboard commands and messages are published to `securebox/commands`. The BeagleY-AI sensor application currently does not subscribe to this topic, so sent messages are recorded and visible in the dashboard but are not yet processed by the board. Implement a subscriber in the sensor application before using this screen for alarm or device-control commands.
