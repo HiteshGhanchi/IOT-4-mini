@@ -53,7 +53,7 @@ def _find_bmp280_device():
 
 def _read_iio_value(device, filename, scale=1000.0):
     with open(os.path.join(device, filename), "r", encoding="ascii") as source:
-        return int(source.read().strip()) / scale
+        return float(source.read().strip()) / scale
 
 
 def _read_bmp280(device):
@@ -64,7 +64,7 @@ def _read_bmp280(device):
     pressure_path = os.path.join(device, IIO_PRESSURE_FILE)
     if os.path.isfile(pressure_path):
         # IIO pressure data is in kPa; convert it to hPa.
-        pressure = _read_iio_value(device, IIO_PRESSURE_FILE, 1000.0) * 10.0
+        pressure = _read_iio_value(device, IIO_PRESSURE_FILE, 1.0) * 10.0
     humidity = None
     humidity_path = os.path.join(device, IIO_HUMIDITY_FILE)
     if os.path.isfile(humidity_path):

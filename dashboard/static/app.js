@@ -63,11 +63,12 @@ function updateState() {
       const payload = JSON.stringify(latest);
       $('temperature').textContent = value(latest.temperature_c);
       $('humidity').textContent = value(latest.humidity_percent);
-      $('humiditySource').textContent = latest.humidity_percent == null ? 'Humidity unavailable · BMP280' : (latest.humidity_source === 'demo' ? 'Demo value' : 'Relative humidity');
+      $('pressure').textContent = value(latest.pressure_hpa);
+      $('humiditySource').textContent = latest.humidity_percent == null ? 'Unavailable · BMP280 has no humidity sensor' : (latest.humidity_source === 'demo' ? 'Demo value' : 'Relative humidity');
       $('distance').textContent = value(latest.distance_cm);
       $('vibration').textContent = latest.vibration ? 'Detected' : 'Clear';
       $('vibrationState').textContent = latest.vibration ? 'Movement sensor active' : 'No vibration detected';
-      $('temperatureSource').textContent = latest.dht_source === 'demo' ? 'Demo value · sensor unavailable' : (latest.dht_source || 'Sensor unavailable');
+      $('temperatureSource').textContent = latest.bmp280_source === 'demo' ? 'Demo value · sensor unavailable' : (latest.bmp280_source === 'sensor' ? 'BMP280 live reading' : 'Sensor unavailable');
       $('lastSeen').textContent = 'Last update: ' + timeLabel(latest.received_at || latest.timestamp);
       const alerts = Array.isArray(latest.alerts) ? latest.alerts.filter(Boolean) : [];
       $('boxStatus').textContent = alerts.length ? alerts.join(' · ') : 'Box is secure';
