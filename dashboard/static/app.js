@@ -63,7 +63,7 @@ function updateState() {
       const payload = JSON.stringify(latest);
       $('temperature').textContent = value(latest.temperature_c);
       $('humidity').textContent = value(latest.humidity_percent);
-      $('humiditySource').textContent = latest.humidity_source === 'demo' ? 'Demo value · 32–41%' : 'Relative humidity';
+      $('humiditySource').textContent = latest.humidity_percent == null ? 'Humidity unavailable · BMP280' : (latest.humidity_source === 'demo' ? 'Demo value' : 'Relative humidity');
       $('distance').textContent = value(latest.distance_cm);
       $('vibration').textContent = latest.vibration ? 'Detected' : 'Clear';
       $('vibrationState').textContent = latest.vibration ? 'Movement sensor active' : 'No vibration detected';

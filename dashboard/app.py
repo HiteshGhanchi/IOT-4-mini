@@ -1,5 +1,4 @@
 import json
-import math
 import os
 import sqlite3
 import ssl
@@ -81,15 +80,12 @@ mqtt_client = None
 
 
 def dashboard_reading(reading):
-    """Add the presentation-only humidity used when the physical sensor is unavailable."""
+    """Keep unavailable sensor values unavailable in the dashboard."""
     if not reading:
         return None
     displayed = dict(reading)
     if displayed.get("humidity_percent") is None:
-        cycle_seconds = 600
-        phase = (time.time() % cycle_seconds) / cycle_seconds * 2 * math.pi
-        displayed["humidity_percent"] = round(36.5 + 4.5 * math.sin(phase), 1)
-        displayed["humidity_source"] = "demo"
+        displayed["humidity_source"] = "unavailable"
     return displayed
 
 

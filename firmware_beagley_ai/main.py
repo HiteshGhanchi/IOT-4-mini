@@ -1,9 +1,8 @@
 """Read BeagleY-AI GPIO sensors and log readings for the SecureBox demo.
 
 Runs with Linux Python 3. HC-SR04 and vibration inputs use libgpiod. Both
-the Debian v1 and v2 Python APIs are supported. The DHT sensor is read
-through the Linux IIO DHT11/DHT22 kernel driver, which handles the sensor's
-timing-sensitive signal outside Python userspace.
+the Debian v1 and v2 Python APIs are supported. BMP280/BME280 temperature,
+pressure, and optional humidity are read through Linux IIO.
 """
 
 import csv
@@ -20,19 +19,21 @@ import config
 
 IIO_ROOT = "/sys/bus/iio/devices"
 IIO_TEMPERATURE_FILE = "in_temp_input"
+IIO_PRESSURE_FILE = "in_pressure_input"
 IIO_HUMIDITY_FILE = "in_humidityrelative_input"
 CSV_HEADER = [
-    "timestamp", "temperature_c", "humidity_percent", "dht_source",
-    "dht_error", "distance_cm", "vibration", "alerts",
+    "timestamp", "temperature_c", "pressure_hpa", "humidity_percent",
+    "bmp280_source", "bmp280_error", "distance_cm", "vibration", "alerts",
 ]
 
 
-def _find_dht_device():
-    if config.DHT_IIO_DEVICE:
-        device = config.DHT_IIO_DEVICE
+def _find_bmp280_device():
+    configured = getattr(config, "BMP280_IIO_DEVICE", "")
+    if configured:
+        device = configured
         if not os.path.isfile(os.path.join(device, IIO_TEMPERATURE_FILE)):
             raise RuntimeError(
-                "DHT_IIO_DEVICE does not contain " + IIO_TEMPERATURE_FILE
+                "BMP280_IIO_DEVICE does not contain " + IIO_TEMPERATURE_FILE
             )
         return device
 
@@ -43,45 +44,54 @@ def _find_dht_device():
                 name = source.read().strip().lower()
         except OSError:
             continue
-        if ("dht" in name and
-                os.path.isfile(os.path.join(device, IIO_TEMPERATURE_FILE)) and
-                os.path.isfile(os.path.join(device, IIO_HUMIDITY_FILE))):
+        if ("bmp280" in name or "bme280" in name) and os.path.isfile(
+            os.path.join(device, IIO_TEMPERATURE_FILE)
+        ):
             return device
     return None
 
 
-def _read_iio_value(device, filename):
+def _read_iio_value(device, filename, scale=1000.0):
     with open(os.path.join(device, filename), "r", encoding="ascii") as source:
-        # The Linux DHT IIO driver exposes temperature and relative humidity
-        # in milli-units (for example 23500 = 23.5 C, 51000 = 51.0%).
-        return int(source.read().strip()) / 1000.0
+        return int(source.read().strip()) / scale
 
 
-def _read_dht(device):
+def _read_bmp280(device):
     if device is None:
-        return None, None
+        return None, None, None
     temperature = _read_iio_value(device, IIO_TEMPERATURE_FILE)
-    humidity = _read_iio_value(device, IIO_HUMIDITY_FILE)
-    return temperature, humidity
+    pressure = None
+    pressure_path = os.path.join(device, IIO_PRESSURE_FILE)
+    if os.path.isfile(pressure_path):
+        # IIO pressure data is in kPa; convert it to hPa.
+        pressure = _read_iio_value(device, IIO_PRESSURE_FILE, 1000.0) * 10.0
+    humidity = None
+    humidity_path = os.path.join(device, IIO_HUMIDITY_FILE)
+    if os.path.isfile(humidity_path):
+        humidity = _read_iio_value(device, IIO_HUMIDITY_FILE)
+    return temperature, pressure, humidity
 
 
-def _apply_dht_fallback(temperature, humidity, error=None):
+def _apply_bmp280_fallback(temperature, pressure, humidity, error=None):
     if temperature is not None:
-        return temperature, humidity, "sensor", error
-    if config.DHT_DEMO_FALLBACK_ENABLED:
-        return config.DHT_DEMO_TEMPERATURE_C, None, "demo", error
-    return None, None, "unavailable", error
+        return temperature, pressure, humidity, "sensor", error
+    if getattr(config, "BMP280_DEMO_FALLBACK_ENABLED", False):
+        return config.BMP280_DEMO_TEMPERATURE_C, None, None, "demo", error
+    return None, None, None, "unavailable", error
 
 
-def _mqtt_payload(timestamp, temperature, humidity, dht_source, dht_error,
-                  distance_cm, vibration, alerts):
+def _mqtt_payload(timestamp, temperature, pressure, humidity, bmp280_source,
+                  bmp280_error, distance_cm, vibration, alerts):
     return json.dumps(
         {
             "timestamp": timestamp,
             "temperature_c": temperature,
+            "pressure_hpa": pressure,
             "humidity_percent": humidity,
-            "dht_source": dht_source,
-            "dht_error": dht_error,
+            "bmp280_source": bmp280_source,
+            "bmp280_error": bmp280_error,
+            "dht_source": bmp280_source,
+            "dht_error": bmp280_error,
             "distance_cm": distance_cm,
             "vibration": vibration,
             "alerts": alerts,
@@ -383,14 +393,14 @@ def _append_csv(path, row):
 
 
 def main():
-    dht_device = _find_dht_device()
-    if dht_device is None:
+    bmp280_device = _find_bmp280_device()
+    if bmp280_device is None:
         print(
-            "[DHT] No DHT IIO device found; checking the configured demo "
-            "fallback."
+            "[BMP280] No BMP280/BME280 IIO device found; checking the "
+            "configured demo fallback."
         )
     else:
-        print("[DHT] IIO device: %s" % dht_device)
+        print("[BMP280] IIO device: %s" % bmp280_device)
 
     gpio = BeagleGpio()
     mqtt_publisher = None
@@ -405,30 +415,34 @@ def main():
 
         while True:
             timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
-            dht_error = None
+            bmp280_error = None
             try:
-                temperature, humidity = _read_dht(dht_device)
+                temperature, pressure, humidity = _read_bmp280(bmp280_device)
             except (OSError, ValueError) as error:
-                temperature, humidity = None, None
-                dht_error = "%s: %s" % (type(error).__name__, error)
+                temperature, pressure, humidity = None, None, None
+                bmp280_error = "%s: %s" % (type(error).__name__, error)
 
-            temperature, humidity, dht_source, dht_error = _apply_dht_fallback(
-                temperature, humidity, dht_error
+            temperature, pressure, humidity, bmp280_source, bmp280_error = (
+                _apply_bmp280_fallback(
+                    temperature, pressure, humidity, bmp280_error
+                )
             )
-            if dht_source == "demo":
+            if bmp280_source == "demo":
                 print(
-                    "[DHT] SENSOR VALUE UNAVAILABLE; using demo fallback "
+                    "[BMP280] SENSOR VALUE UNAVAILABLE; using demo fallback "
                     "%.1f C (not a sensor measurement)%s"
                     % (
                         temperature,
-                        ": " + dht_error if dht_error else "",
+                        ": " + bmp280_error if bmp280_error else "",
                     )
                 )
-            elif dht_source == "unavailable":
+            elif bmp280_source == "unavailable":
                 print(
-                    "[DHT] reading unavailable%s"
-                    % (": " + dht_error if dht_error else "")
+                    "[BMP280] reading unavailable%s"
+                    % (": " + bmp280_error if bmp280_error else "")
                 )
+            if humidity is None:
+                print("[BMP280] humidity unavailable: BMP280 does not measure humidity")
 
             distance_cm = gpio.read_distance_cm()
             if distance_cm is None:
@@ -438,25 +452,28 @@ def main():
             alerts = _alerts(temperature, humidity, distance_cm, vibration)
             distance_text = "--" if distance_cm is None else "%.1f cm" % distance_cm
             temp_text = "--" if temperature is None else "%.1f C" % temperature
+            pressure_text = "--" if pressure is None else "%.1f hPa" % pressure
             humidity_text = "--" if humidity is None else "%.1f%%" % humidity
             alert_text = ", ".join(alerts) if alerts else "none"
-            if dht_source == "demo":
+            if bmp280_source == "demo":
                 temp_text += " (DEMO)"
 
             print(
-                "%s | temp=%s hum=%s dht_source=%s distance=%s "
+                "%s | temp=%s pressure=%s hum=%s bmp280_source=%s distance=%s "
                 "vibration=%s | alerts=%s"
-                % (timestamp, temp_text, humidity_text, dht_source,
-                   distance_text, "YES" if vibration else "no", alert_text)
+                % (timestamp, temp_text, pressure_text, humidity_text,
+                   bmp280_source, distance_text,
+                   "YES" if vibration else "no", alert_text)
             )
             _append_csv(
                 csv_path,
                 [
                     timestamp,
                     "" if temperature is None else "%.2f" % temperature,
+                    "" if pressure is None else "%.2f" % pressure,
                     "" if humidity is None else "%.2f" % humidity,
-                    dht_source,
-                    dht_error or "",
+                    bmp280_source,
+                    bmp280_error or "",
                     "" if distance_cm is None else "%.2f" % distance_cm,
                     int(vibration),
                     "; ".join(alerts),
@@ -467,9 +484,10 @@ def main():
                     _mqtt_payload(
                         timestamp,
                         temperature,
+                        pressure,
                         humidity,
-                        dht_source,
-                        dht_error,
+                        bmp280_source,
+                        bmp280_error,
                         distance_cm,
                         vibration,
                         alerts,

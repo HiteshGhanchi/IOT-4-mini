@@ -9,14 +9,13 @@ cd ~/Documents/SecureBox
 
 The program reads:
 
-- DHT11/DHT22 through Linux IIO on physical header pin 7
+- BMP280/BME280 through Linux IIO on I2C: SDA pin 3, SCL pin 5
 - HC-SR04 TRIG on physical pin 11 and ECHO on physical pin 13
 - Digital vibration `DO` on physical pin 15
 
 It prints readings and threshold alerts every five seconds and writes
-`readings_mqtt.csv` beside the code. If DHT reads fail, the default demo
-fallback shows a clearly labelled demo 29.5 C; it is not a sensor
-measurement. Stop it with Ctrl+C.
+`readings_mqtt.csv` beside the code. Demo fallback is disabled by default;
+BMP280 failures are reported as unavailable. Stop it with Ctrl+C.
 
 For MQTT, install and start the local broker and Python client once:
 
@@ -32,8 +31,9 @@ Preserve the GPIO values in the existing `config.py`, and add/update these
 settings before launching:
 
 ```python
-DHT_DEMO_FALLBACK_ENABLED = True
-DHT_DEMO_TEMPERATURE_C = 29.5
+BMP280_DEMO_FALLBACK_ENABLED = False
+BMP280_DEMO_TEMPERATURE_C = 29.5
+BMP280_IIO_DEVICE = ""
 CSV_FILE = "readings_mqtt.csv"
 MQTT_ENABLED = True
 MQTT_BROKER_HOST = "127.0.0.1"
@@ -52,7 +52,7 @@ In another terminal, watch messages while the app runs:
 mosquitto_sub --cafile /etc/mosquitto/certs/securebox/ca.crt -h 127.0.0.1 -p 8883 -t securebox/sensors -v
 ```
 
-Messages identify DHT readings as `sensor`, `demo`, or `unavailable`.
+Messages identify BMP280/BME280 readings as `sensor`, `demo`, or `unavailable`.
 The demo fallback also includes the sensor's read error for transparent
 demonstration. The app prints `[TLS] VERIFIED` with the negotiated protocol
 and cipher after it validates the broker certificate.
@@ -62,14 +62,19 @@ and `/dev/gpiochip3` for `main_gpio1`. Check `gpiodetect` if the OS image is
 changed. GPIO inputs are 3.3 V only. HC-SR04 ECHO must be level-shifted when
 the sensor is powered at 5 V.
 
-For the DHT module, connect `VCC` to 3.3 V, `DATA` to physical pin 7, and
-`GND` to physical pin 6. The DHT device-tree overlay is already installed and
-enabled on this board. A valid read can be tested directly with:
+For the environmental sensor, connect its `VCC/VIN` to 3.3 V, `GND` to ground,
+`SDA` to physical pin 3, and `SCL` to physical pin 5. No series resistor is
+required on a normal 3.3 V breakout. Use 5 V only if the module explicitly
+supports regulated 5 V input. A BMP280 does not measure humidity; use BME280
+if humidity is required.
+
+Check the sensor directly with:
 
 ```bash
-cat /sys/bus/iio/devices/iio:device0/name
-cat /sys/bus/iio/devices/iio:device0/in_temp_input
-cat /sys/bus/iio/devices/iio:device0/in_humidityrelative_input
+i2cdetect -y 1
+cat /sys/bus/iio/devices/iio:device*/name
+cat /sys/bus/iio/devices/iio:device*/in_temp_input
+cat /sys/bus/iio/devices/iio:device*/in_pressure_input
 ```
 
 Values are milli-units, for example `25000` means 25 C and `55000` means 55%.

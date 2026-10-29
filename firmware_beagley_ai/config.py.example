@@ -12,7 +12,7 @@ GPIO_CHIP_MAIN0 = "/dev/gpiochip2"
 GPIO_CHIP_MAIN1 = "/dev/gpiochip3"
 
 # BeagleY-AI header assignments:
-# DHT DATA: P7  -> GPIO0_38 (handled by the Linux DHT IIO driver)
+# BMP280/BME280 I2C: SDA P3, SCL P5 (3.3 V logic)
 # HC-SR04 TRIG: P11 -> GPIO1_8
 # HC-SR04 ECHO: P13 -> GPIO0_33 (through a 5 V-to-3.3 V divider)
 # Vibration DO: P15 -> GPIO0_41
@@ -20,13 +20,14 @@ ULTRASONIC_TRIGGER_OFFSET = 8
 ULTRASONIC_ECHO_OFFSET = 33
 VIBRATION_OFFSET = 41
 
-# Leave empty to discover a bound DHT IIO device automatically.
+# Leave empty to discover a bound BMP280/BME280 IIO device automatically.
 # Example: "/sys/bus/iio/devices/iio:device0"
-DHT_IIO_DEVICE = ""
+BMP280_IIO_DEVICE = ""
 
-# Clearly marked presentation fallback; it is not a sensor measurement.
-DHT_DEMO_FALLBACK_ENABLED = True
-DHT_DEMO_TEMPERATURE_C = 29.5
+# BMP280 measures temperature and pressure, not humidity.
+# Use a BME280 module instead if humidity is required.
+BMP280_DEMO_FALLBACK_ENABLED = False
+BMP280_DEMO_TEMPERATURE_C = 29.5
 
 VIBRATION_ACTIVE_LEVEL = 1
 DISTANCE_ALERT_CM = 50.0
@@ -36,7 +37,7 @@ HUMIDITY_MAX_PERCENT = 85.0
 
 SAMPLE_INTERVAL_SECONDS = 5
 ECHO_TIMEOUT_SECONDS = 0.03
-CSV_FILE = "readings_mqtt.csv"
+CSV_FILE = "readings_bmp280.csv"
 
 MQTT_ENABLED = True
 MQTT_BROKER_HOST = "127.0.0.1"
