@@ -15,7 +15,7 @@ The program reads:
 
 It prints readings and threshold alerts every five seconds and writes
 `readings_mqtt.csv` beside the code. If DHT reads fail, the default demo
-fallback shows a clearly labelled simulated 29.5 C; it is not a sensor
+fallback shows a clearly labelled demo 29.5 C; it is not a sensor
 measurement. Stop it with Ctrl+C.
 
 For MQTT, install and start the local broker and Python client once:
@@ -52,8 +52,8 @@ In another terminal, watch messages while the app runs:
 mosquitto_sub --cafile /etc/mosquitto/certs/securebox/ca.crt -h 127.0.0.1 -p 8883 -t securebox/sensors -v
 ```
 
-Messages identify DHT readings as `sensor`, `simulated`, or `unavailable`.
-The simulated fallback also includes the sensor's read error for transparent
+Messages identify DHT readings as `sensor`, `demo`, or `unavailable`.
+The demo fallback also includes the sensor's read error for transparent
 demonstration. The app prints `[TLS] VERIFIED` with the negotiated protocol
 and cipher after it validates the broker certificate.
 

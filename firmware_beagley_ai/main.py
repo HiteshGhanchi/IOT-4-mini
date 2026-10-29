@@ -69,7 +69,7 @@ def _apply_dht_fallback(temperature, humidity, error=None):
     if temperature is not None:
         return temperature, humidity, "sensor", error
     if config.DHT_DEMO_FALLBACK_ENABLED:
-        return config.DHT_DEMO_TEMPERATURE_C, None, "simulated", error
+        return config.DHT_DEMO_TEMPERATURE_C, None, "demo", error
     return None, None, "unavailable", error
 
 
@@ -415,9 +415,9 @@ def main():
             temperature, humidity, dht_source, dht_error = _apply_dht_fallback(
                 temperature, humidity, dht_error
             )
-            if dht_source == "simulated":
+            if dht_source == "demo":
                 print(
-                    "[DHT] SENSOR VALUE UNAVAILABLE; using SIMULATED fallback "
+                    "[DHT] SENSOR VALUE UNAVAILABLE; using demo fallback "
                     "%.1f C (not a sensor measurement)%s"
                     % (
                         temperature,
@@ -440,8 +440,8 @@ def main():
             temp_text = "--" if temperature is None else "%.1f C" % temperature
             humidity_text = "--" if humidity is None else "%.1f%%" % humidity
             alert_text = ", ".join(alerts) if alerts else "none"
-            if dht_source == "simulated":
-                temp_text += " (SIMULATED)"
+            if dht_source == "demo":
+                temp_text += " (DEMO)"
 
             print(
                 "%s | temp=%s hum=%s dht_source=%s distance=%s "

@@ -110,7 +110,7 @@ the image needs the kernel `dht11` driver and a device-tree node for the DHT
 data GPIO (physical pin 7). The exact overlay procedure depends on the
 BeagleY-AI Debian/kernel image. Until that is enabled, the script reports
 the failed sensor read. For presentations, `config.py` enables a clearly
-labelled **simulated** 29.5 C temperature fallback by default; humidity
+labelled **demo** 29.5 C temperature fallback by default; humidity
 remains unavailable. This value is not measured by the sensor. Set
 `DHT_DEMO_FALLBACK_ENABLED = False` to disable the fallback.
 
@@ -130,10 +130,10 @@ mosquitto_sub --cafile /etc/mosquitto/certs/securebox/ca.crt -h 127.0.0.1 -p 888
 After connecting, the application prints `[TLS] VERIFIED` with the negotiated
 protocol and cipher. It verifies the broker certificate; no insecure
 verification bypass is used.
-Each message includes `dht_source` (`sensor`, `simulated`, or `unavailable`)
+Each message includes `dht_source` (`sensor`, `demo`, or `unavailable`)
 and `dht_error`; when the demo fallback is used, `temperature_c` is 29.5 and
 `humidity_percent` is `null`. Console output and the CSV also identify
-simulated readings. The updated CSV includes source/error columns and is
+demo readings. The updated CSV includes source/error columns and is
 written to `readings_mqtt.csv`, leaving an older `readings.csv` untouched.
 
 This starter's broker is local to the board. To allow remote subscribers,

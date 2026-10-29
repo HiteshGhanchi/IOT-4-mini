@@ -63,10 +63,11 @@ function updateState() {
       const payload = JSON.stringify(latest);
       $('temperature').textContent = value(latest.temperature_c);
       $('humidity').textContent = value(latest.humidity_percent);
+      $('humiditySource').textContent = latest.humidity_source === 'demo' ? 'Demo value · 32–41%' : 'Relative humidity';
       $('distance').textContent = value(latest.distance_cm);
       $('vibration').textContent = latest.vibration ? 'Detected' : 'Clear';
       $('vibrationState').textContent = latest.vibration ? 'Movement sensor active' : 'No vibration detected';
-      $('temperatureSource').textContent = latest.dht_source === 'simulated' ? 'Simulated demo value' : (latest.dht_source || 'Sensor unavailable');
+      $('temperatureSource').textContent = latest.dht_source === 'demo' ? 'Demo value · sensor unavailable' : (latest.dht_source || 'Sensor unavailable');
       $('lastSeen').textContent = 'Last update: ' + timeLabel(latest.received_at || latest.timestamp);
       const alerts = Array.isArray(latest.alerts) ? latest.alerts.filter(Boolean) : [];
       $('boxStatus').textContent = alerts.length ? alerts.join(' · ') : 'Box is secure';

@@ -95,8 +95,8 @@ Press **Ctrl+C** in the application terminal to stop it.
 
 Readings are appended to `readings_mqtt.csv`. Each message and CSV row has a
 `dht_source` field. If the physical DHT cannot be read, the configured demo
-fallback may publish a **simulated** temperature; it is labelled as
-simulated, and humidity remains unavailable. Do not treat simulated readings
+fallback may publish a **demo** temperature; it is labelled as
+`demo`, and humidity remains unavailable. Do not treat demo readings
 as measurements. Set `DHT_DEMO_FALLBACK_ENABLED = False` in `config.py` to
 disable that fallback.
 
@@ -119,7 +119,33 @@ disable that fallback.
 For wiring and the longer Thonny guide, see
 [firmware_beagley_ai/README_THONNY.md](./firmware_beagley_ai/README_THONNY.md).
 
+## Complete run and demonstration guide
+
+For a detailed teacher-presentation guide covering the broker, MQTT subscribers,
+sensor publisher, dashboard, browser, message commands, and troubleshooting, see
+[HOW_TO_RUN.md](./HOW_TO_RUN.md). A shorter command-only guide is available in
+[HOW_TO_DEMO_QUICK.md](./HOW_TO_DEMO_QUICK.md).
+
 ## Run the authenticated web dashboard on the BeagleY-AI
+
+### Device already prepared in the lab
+
+The SecureBox project is installed on the board at `10.10.190.111` under
+`~/Documents/SecureBox`. The live sensor publisher, dashboard, Mosquitto broker,
+and local MQTT TLS listener are currently running. To open the dashboard, visit
+`http://10.10.190.111:5000` from another computer on the LAN, or
+`http://127.0.0.1:5000` directly on the board.
+
+### Prepare the dashboard for the first run
+
+```bash
+cd ~/Documents/SecureBox/dashboard
+python3 -m venv --system-site-packages .venv
+source .venv/bin/activate
+python3 -m pip install -r requirements.txt
+```
+
+### Start the authenticated web dashboard on the BeagleY-AI
 
 The dashboard is in [dashboard/](./dashboard/). It shows live MQTT readings, alerts, recent history, and publishes messages or commands to `securebox/commands`.
 
@@ -196,6 +222,37 @@ sudo systemctl status mosquitto
 ```
 
 Press `Ctrl+C` in either terminal to stop that process.
+
+## Record a demo video on Linux
+
+To demonstrate the dashboard, sensors, and commands, install FFmpeg on the
+board and use an available USB camera:
+
+```bash
+sudo apt update
+sudo apt install ffmpeg
+ls /dev/video*
+ffmpeg -f v4l2 -framerate 30 -video_size 1280x720 -i /dev/video0 -c:v libx264 -pix_fmt yuv420p ~/SecureBox-demo.mp4
+```
+
+Press `Ctrl+C` to stop recording. If a USB microphone is connected, list its
+recording device first:
+
+```bash
+arecord -l
+```
+
+Then record camera video and audio together, replacing `hw:1,0` with the number
+shown by `arecord -l`:
+
+```bash
+ffmpeg -f v4l2 -framerate 30 -video_size 1280x720 -i /dev/video0 -f alsa -i hw:1,0 -c:v libx264 -pix_fmt yuv420p -c:a aac ~/SecureBox-demo.mp4
+```
+
+For a presentation recording made from the BeagleY-AI desktop without a
+camera, phone-based screen recording is often more reliable on this Debian
+image. Show the running dashboard, MQTT sensor terminal, and one live
+sensor event in the same recording.
 
 ### Current messaging limitation
 

@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import sqlite3
 import ssl
@@ -78,6 +79,20 @@ init_db()
 
 mqtt_client = None
 
+
+def dashboard_reading(reading):
+    """Add the presentation-only humidity used when the physical sensor is unavailable."""
+    if not reading:
+        return None
+    displayed = dict(reading)
+    if displayed.get("humidity_percent") is None:
+        cycle_seconds = 600
+        phase = (time.time() % cycle_seconds) / cycle_seconds * 2 * math.pi
+        displayed["humidity_percent"] = round(36.5 + 4.5 * math.sin(phase), 1)
+        displayed["humidity_source"] = "demo"
+    return displayed
+
+
 def mqtt_new_client():
     if mqtt is None:
         return None
@@ -98,8 +113,9 @@ def mqtt_callbacks(client):
 
     def on_connect(_client, _userdata, _flags, reason_code, _properties=None):
         global mqtt_status
-        mqtt_status = "connected" if int(reason_code) == 0 else "connection error"
-        if int(reason_code) == 0:
+        reason_value = getattr(reason_code, "value", reason_code)
+        mqtt_status = "connected" if reason_value == 0 else "connection error"
+        if reason_value == 0:
             _client.subscribe(app.config["MQTT_TOPIC"], qos=1)
 
     def on_disconnect(_client, _userdata, _reason_code, _properties=None):
@@ -201,10 +217,12 @@ def api_state():
             pass
     with db() as connection:
         messages = connection.execute("SELECT sent_at, topic, action, text FROM messages ORDER BY id DESC LIMIT 20").fetchall()
+    displayed_latest = dashboard_reading(latest_reading)
+    displayed_history = [dashboard_reading(reading) for reading in history]
     return jsonify({
         "mqtt": mqtt_status,
-        "latest": latest_reading,
-        "history": history,
+        "latest": displayed_latest,
+        "history": displayed_history,
         "messages": [dict(row) for row in messages],
     })
 
